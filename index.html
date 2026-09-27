@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RSVP Reader</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0B0B0B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RSVP Reader">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root{
+    --bg:#0B0B0B; --bg2:#161616; --panel:#1C1C1C; --panel2:#232323;
+    --ink:#F2EFE9; --ink-dim:#8C8880;
+    --rule:#2B2B2B; --accent:#F2B705; --accent-ink:#0B0B0B;
+    font-family:'IBM Plex Sans',system-ui,sans-serif;
+  }
+  :root[data-theme="light"]{
+    --bg:#F5F3EE; --bg2:#EBE8E0; --panel:#FFFFFF; --panel2:#F0EEE8;
+    --ink:#17150F; --ink-dim:#6E6A60; --rule:#DEDACF; --accent:#B9860A; --accent-ink:#FFFFFF;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  html{scroll-padding-top:env(safe-area-inset-top,0px);}
+  body{margin:0; background:var(--bg); color:var(--ink); overflow:hidden;
+    padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);}
+  button{font-family:inherit;}
+  .view{display:none; height:100%; flex-direction:column;}
+  .view.active{display:flex;}
+
+  /* ---------- LIBRARY ---------- */
+  #libraryView{padding:18px 18px 0;}
+  .lib-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;}
+  .brand{display:flex; align-items:center; gap:9px;}
+  .brand .dot{width:11px; height:11px; border-radius:50%; background:var(--accent);}
+  .brand h1{font-size:17px; margin:0; font-weight:700; letter-spacing:.2px;}
+  .icon-btn{background:var(--panel); border:1px solid var(--rule); color:var(--ink); width:40px; height:40px;
+    border-radius:11px; display:flex; align-items:center; justify-content:center; cursor:pointer;}
+  .icon-btn.accent{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
+  .icon-btn svg{width:19px; height:19px;}
+
+  .lib-grid{overflow-y:auto; flex:1; padding-bottom:24px; display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  @media (min-width:640px){ .lib-grid{grid-template-columns:1fr 1fr 1fr;} }
+  .doc-card{background:var(--panel); border:1px solid var(--rule); border-radius:14px; padding:14px;
+    display:flex; flex-direction:column; gap:8px; cursor:pointer; position:relative;}
+  .doc-card .thumb{height:64px; border-radius:9px; background:var(--bg2); display:flex; align-items:center;
+    justify-content:center; color:var(--accent);}
+  .doc-card .thumb svg{width:26px; height:26px;}
+  .doc-name{font-size:13.5px; font-weight:600; line-height:1.3; max-height:2.6em; overflow:hidden;}
+  .doc-meta{font-size:11px; color:var(--ink-dim);}
+  .doc-progress{height:3px; background:var(--rule); border-radius:2px; overflow:hidden; margin-top:2px;}
+  .doc-progress .fill{height:100%; background:var(--accent);}
+  .doc-del{position:absolute; top:8px; right:8px; width:24px; height:24px; border-radius:50%;
+    background:rgba(0,0,0,.55); color:#fff; border:none; font-size:14px; display:none; align-items:center; justify-content:center;}
+  .doc-card:hover .doc-del{display:flex;}
+
+  .empty-state{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color:var(--ink-dim); text-align:center; gap:10px; padding-bottom:40px;}
+  .empty-state svg{width:40px; height:40px; opacity:.5;}
+
+  .upload-fab{position:fixed; right:20px; bottom:calc(20px + env(safe-area-inset-bottom,0px));
+    width:56px; height:56px; border-radius:50%; background:var(--accent); color:var(--accent-ink);
+    border:none; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 18px rgba(0,0,0,.35); cursor:pointer;}
+  .upload-fab svg{width:24px; height:24px;}
+  #fileInput{display:none;}
+
+  .upload-overlay{position:fixed; inset:0; background:rgba(0,0,0,.65); display:none; align-items:center; justify-content:center; z-index:40; padding:20px;}
+  .upload-overlay.active{display:flex;}
+  .upload-box{background:var(--panel); border:1px solid var(--rule); border-radius:16px; padding:28px 20px; width:100%; max-width:360px; text-align:center;}
+  .upload-box b{display:block; font-size:15px; margin-bottom:6px;}
+  .upload-box p{font-size:13px; color:var(--ink-dim); margin:0 0 16px;}
+  .status-bar{height:4px; background:var(--rule); border-radius:2px; overflow:hidden; margin-top:14px;}
+  .status-bar .fill{height:100%; width:0%; background:var(--accent); transition:width .15s linear;}
+  .status-txt{font-size:12px; color:var(--ink-dim); margin-top:8px;}
+
+  /* ---------- READER ---------- */
+  #readerView{position:relative;}
+  .r-topbar{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; flex:0 0 auto;}
+  .r-title{font-size:12.5px; color:var(--ink-dim); max-width:52vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+
+  .stage{flex:1; position:relative; display:flex; align-items:center; justify-content:center;
+    overflow:hidden; padding:0 16px;}
+  .guide-top{position:absolute; top:10%; left:50%; width:2px; height:14px; background:var(--accent); opacity:.55;}
+  .guide-bot{position:absolute; bottom:10%; left:50%; width:2px; height:14px; background:var(--accent); opacity:.55;}
+  .word{font-family:'IBM Plex Mono',monospace; font-weight:700; letter-spacing:.5px; white-space:nowrap;
+    font-size:clamp(30px, 9vw, 58px);}
+  .word .orp{color:var(--accent);}
+
+  .trail{flex:0 0 auto; padding:8px 18px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
+    font-size:13px; color:var(--ink-dim); border-top:1px solid var(--rule); border-bottom:1px solid var(--rule);}
+  .trail .current{color:var(--ink); font-weight:600;}
+
+  .r-controls{flex:0 0 auto; padding:12px 18px calc(14px + env(safe-area-inset-bottom,0px));
+    display:flex; flex-direction:column; gap:10px;}
+  .r-row{display:flex; align-items:center; gap:12px; justify-content:center;}
+  .btn{background:var(--panel); border:1px solid var(--rule); color:var(--ink); width:46px; height:46px;
+    border-radius:50%; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center;}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink); width:56px; height:56px; font-size:19px;}
+  .speed-label{display:flex; justify-content:space-between; font-size:11.5px; color:var(--ink-dim); margin-bottom:5px;}
+  input[type=range]{-webkit-appearance:none; width:100%; height:3px; background:var(--rule); border-radius:2px; outline:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--accent); cursor:pointer; margin-top:-6.5px;}
+  input[type=range]::-moz-range-thumb{width:16px; height:16px; border-radius:50%; background:var(--accent); border:none; cursor:pointer;}
+
+  /* ---------- MEDIA (immagini/formule) ---------- */
+  .media-wrap{position:absolute; inset:0; background:var(--bg); display:flex; flex-direction:column; z-index:5;}
+  .media-viewport{flex:1; overflow:hidden; position:relative; touch-action:none; display:flex; align-items:center; justify-content:center;}
+  .media-viewport img{max-width:100%; max-height:100%; will-change:transform; user-select:none; -webkit-user-drag:none;}
+  .media-footer{flex:0 0 auto; padding:14px 18px calc(16px + env(safe-area-inset-bottom,0px)); display:flex;
+    flex-direction:column; align-items:center; gap:8px;}
+  .media-label{font-size:12px; color:var(--ink-dim);}
+  .continue-btn{background:var(--accent); color:var(--accent-ink); border:none; padding:12px 30px;
+    border-radius:26px; font-size:15px; font-weight:700; cursor:pointer;}
+  .zoom-hint{font-size:11px; color:var(--ink-dim); opacity:.7;}
+
+  /* ---------- DRAWER PAGINE ---------- */
+  .drawer-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.5); opacity:0; pointer-events:none;
+    transition:opacity .2s; z-index:20;}
+  .drawer-backdrop.open{opacity:1; pointer-events:auto;}
+  .drawer{position:fixed; top:0; right:0; bottom:0; width:min(78vw, 300px); background:var(--panel);
+    border-left:1px solid var(--rule); transform:translateX(100%); transition:transform .22s ease; z-index:21;
+    display:flex; flex-direction:column; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);}
+  .drawer.open{transform:translateX(0);}
+  .drawer-head{padding:16px; font-size:13px; font-weight:700; color:var(--ink-dim); border-bottom:1px solid var(--rule);}
+  .drawer-list{flex:1; overflow-y:auto; padding:8px;}
+  .drawer-item{padding:11px 12px; border-radius:10px; font-size:13.5px; color:var(--ink-dim); cursor:pointer; display:flex; align-items:center; gap:8px;}
+  .drawer-item.current{background:var(--bg2); color:var(--ink); font-weight:700;}
+  .drawer-item svg{width:14px; height:14px; flex:0 0 auto; opacity:.7;}
+</style>
+</head>
+<body>
+
+<!-- ============ LIBRERIA ============ -->
+<div class="view active" id="libraryView">
+  <div class="lib-header">
+    <div class="brand"><span class="dot"></span><h1>RSVP Reader</h1></div>
+    <button class="icon-btn" id="themeToggle" title="Tema">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+    </button>
+  </div>
+  <div class="lib-grid" id="libGrid"></div>
+</div>
+
+<button class="upload-fab" id="uploadFab" title="Carica documento">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+</button>
+<input type="file" id="fileInput" accept="application/pdf">
+
+<div class="upload-overlay" id="uploadOverlay">
+  <div class="upload-box">
+    <b id="uploadTitle">Elaborazione del documento</b>
+    <p id="uploadSub">Sto analizzando le pagine…</p>
+    <div class="status-bar"><div class="fill" id="statusFill"></div></div>
+    <div class="status-txt" id="statusTxt"></div>
+  </div>
+</div>
+
+<!-- ============ READER ============ -->
+<div class="view" id="readerView">
+  <div class="r-topbar">
+    <button class="icon-btn" id="backToLib" title="Libreria">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <div class="r-title" id="readerTitle"></div>
+    <button class="icon-btn" id="drawerToggle" title="Pagine">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>
+    </button>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="guide-top"></div><div class="guide-bot"></div>
+    <div class="word" id="word">Pronto</div>
+  </div>
+
+  <div class="trail" id="trail"></div>
+
+  <div class="r-controls">
+    <div>
+      <div class="speed-label"><span>Velocità</span><span id="wpmLabel">320 wpm</span></div>
+      <input type="range" id="wpm" min="120" max="700" step="10" value="320">
+    </div>
+    <div class="r-row">
+      <button class="btn" id="restart" title="Ricomincia">⟲</button>
+      <button class="btn primary" id="play" title="Play/Pausa">▶</button>
+      <button class="btn" id="back" title="Indietro">⟵</button>
+    </div>
+  </div>
+</div>
+
+<div class="drawer-backdrop" id="drawerBackdrop"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">Pagine del documento</div>
+  <div class="drawer-list" id="drawerList"></div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+/* ============================================================
+   IndexedDB — libreria documenti (persistenza sul dispositivo)
+   ============================================================ */
+const DB_NAME = 'rsvpReaderDB', DB_VERSION = 1, STORE = 'documents';
+function openDB(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = ()=>{
+      const db = req.result;
+      if(!db.objectStoreNames.contains(STORE)){
+        db.createObjectStore(STORE, {keyPath:'id'});
+      }
+    };
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+async function dbPut(doc){
+  const db = await openDB();
+  return new Promise((res,rej)=>{
+    const tx = db.transaction(STORE,'readwrite');
+    tx.objectStore(STORE).put(doc);
+    tx.oncomplete = ()=>res(); tx.onerror = ()=>rej(tx.error);
+  });
+}
+async function dbGetAll(){
+  const db = await openDB();
+  return new Promise((res,rej)=>{
+    const tx = db.transaction(STORE,'readonly');
+    const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = ()=>res(req.result || []); req.onerror = ()=>rej(req.error);
+  });
+}
+async function dbGet(id){
+  const db = await openDB();
+  return new Promise((res,rej)=>{
+    const tx = db.transaction(STORE,'readonly');
+    const req = tx.objectStore(STORE).get(id);
+    req.onsuccess = ()=>res(req.result || null); req.onerror = ()=>rej(req.error);
+  });
+}
+async function dbDelete(id){
+  const db = await openDB();
+  return new Promise((res,rej)=>{
+    const tx = db.transaction(STORE,'readwrite');
+    tx.objectStore(STORE).delete(id);
+    tx.oncomplete = ()=>res(); tx.onerror = ()=>rej(tx.error);
+  });
+}
+
+/* ============================================================
+   LIBRERIA — UI
+   ============================================================ */
+const libGrid = document.getElementById('libGrid');
+const uploadFab = document.getElementById('uploadFab');
+const fileInput = document.getElementById('fileInput');
+const uploadOverlay = document.getElementById('uploadOverlay');
+const statusFill = document.getElementById('statusFill');
+const statusTxt = document.getElementById('statusTxt');
+
+const docIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/></svg>';
+const emptyIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/></svg>';
+
+async function renderLibrary(){
+  const docs = (await dbGetAll()).sort((a,b)=>b.addedAt-a.addedAt);
+  if(docs.length===0){
+    libGrid.innerHTML = '';
+    libGrid.style.display='none';
+    if(!document.getElementById('emptyState')){
+      const es = document.createElement('div');
+      es.className='empty-state'; es.id='emptyState';
+      es.innerHTML = emptyIcon + '<div>Nessun documento ancora.<br>Tocca + per caricarne uno.</div>';
+      document.getElementById('libraryView').appendChild(es);
+    }
+    return;
+  }
+  const es = document.getElementById('emptyState'); if(es) es.remove();
+  libGrid.style.display='grid';
+  libGrid.innerHTML = docs.map(d=>{
+    const pct = d.totalSteps ? Math.round(((d.lastIndex||0)/d.totalSteps)*100) : 0;
+    const dateStr = new Date(d.addedAt).toLocaleDateString('it-IT', {day:'2-digit', month:'short'});
+    return '<div class="doc-card" data-id="'+d.id+'">'
+      + '<button class="doc-del" data-del="'+d.id+'">×</button>'
+      + '<div class="thumb">'+docIcon+'</div>'
+      + '<div class="doc-name">'+escapeHtml(d.name)+'</div>'
+      + '<div class="doc-meta">'+d.pageCount+' pagine · '+dateStr+'</div>'
+      + (pct>0 ? '<div class="doc-progress"><div class="fill" style="width:'+pct+'%"></div></div>' : '')
+      + '</div>';
+  }).join('');
+}
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+libGrid.addEventListener('click', async (e)=>{
+  const del = e.target.closest('[data-del]');
+  if(del){ e.stopPropagation(); await dbDelete(Number(del.dataset.del)); renderLibrary(); return; }
+  const card = e.target.closest('.doc-card');
+  if(card) openDocument(Number(card.dataset.id));
+});
+
+uploadFab.onclick = ()=>fileInput.click();
+fileInput.onchange = ()=>{ if(fileInput.files[0]) handleUpload(fileInput.files[0]); };
+
+async function handleUpload(file){
+  if(file.type !== 'application/pdf'){ alert('Per ora sono supportati solo i file PDF.'); return; }
+  uploadOverlay.classList.add('active');
+  document.getElementById('uploadTitle').textContent = 'Elaborazione del documento';
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data:buf.slice(0)}).promise;
+  statusFill.style.width = '15%';
+  statusTxt.textContent = pdf.numPages + ' pagine rilevate';
+  const doc = {
+    id: Date.now(),
+    name: file.name.replace(/\.pdf$/i,''),
+    addedAt: Date.now(),
+    pageCount: pdf.numPages,
+    fileBlob: new Blob([buf], {type:'application/pdf'}),
+    lastIndex: 0,
+    totalSteps: 0
+  };
+  await dbPut(doc);
+  statusFill.style.width = '100%';
+  setTimeout(async ()=>{
+    uploadOverlay.classList.remove('active');
+    fileInput.value='';
+    await renderLibrary();
+    openDocument(doc.id);
+  }, 250);
+}
+
+/* ============================================================
+   PARSING PDF -> steps (parola / immagine con numero di pagina)
+   ============================================================ */
+async function parsePdf(blob, onProgress){
+  const buf = await blob.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+  const steps = [];
+  const total = pdf.numPages;
+  for(let p=1; p<=total; p++){
+    onProgress && onProgress(p, total);
+    const page = await pdf.getPage(p);
+    const opList = await page.getOperatorList();
+    const hasImage = opList.fnArray.some(fn => fn===pdfjsLib.OPS.paintImageXObject || fn===pdfjsLib.OPS.paintJpegXObject);
+    if(hasImage){
+      const viewport = page.getViewport({scale:2});
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      await page.render({canvasContext:canvas.getContext('2d'), viewport}).promise;
+      steps.push({type:'image', page:p, dataUrl:canvas.toDataURL('image/jpeg',0.85), label:'Pagina '+p+' — immagini/diagrammi'});
+    } else {
+      const textContent = await page.getTextContent();
+      const words = textContent.items.map(it=>it.str).join(' ').split(/\s+/).filter(Boolean);
+      words.forEach(w=>steps.push({type:'word', page:p, text:w}));
+    }
+  }
+  return {steps, pageCount: total};
+}
+
+/* ============================================================
+   READER — stato e motore RSVP
+   ============================================================ */
+const libraryView = document.getElementById('libraryView');
+const readerView = document.getElementById('readerView');
+const readerTitle = document.getElementById('readerTitle');
+const stage = document.getElementById('stage');
+const wordEl = document.getElementById('word');
+const trailEl = document.getElementById('trail');
+const playBtn = document.getElementById('play');
+const wpmInput = document.getElementById('wpm');
+const wpmLabel = document.getElementById('wpmLabel');
+const drawer = document.getElementById('drawer');
+const drawerBackdrop = document.getElementById('drawerBackdrop');
+const drawerList = document.getElementById('drawerList');
+
+let currentDoc = null, steps = [], idx = 0, playing = false, timer = null;
+const TRAIL_MAX = 14;
+let pageIndexMap = []; // pageIndexMap[pageNum] = primo indice step di quella pagina
+
+async function openDocument(id){
+  const doc = await dbGet(id);
+  if(!doc) return;
+  currentDoc = doc;
+  readerTitle.textContent = doc.name;
+  switchView('reader');
+  uploadOverlay.classList.add('active');
+  document.getElementById('uploadTitle').textContent = 'Apertura documento';
+  statusFill.style.width='10%';
+  const {steps: parsed, pageCount} = await parsePdf(doc.fileBlob, (p,total)=>{
+    statusTxt.textContent = 'Pagina '+p+' di '+total;
+    statusFill.style.width = Math.round(p/total*90)+'%';
+  });
+  steps = parsed;
+  buildPageIndexMap();
+  doc.totalSteps = steps.length;
+  await dbPut(doc);
+  statusFill.style.width='100%';
+  setTimeout(()=>uploadOverlay.classList.remove('active'), 200);
+
+  idx = Math.min(doc.lastIndex||0, steps.length-1<0?0:steps.length-1);
+  playing = false; playBtn.textContent='▶';
+  trailEl.innerHTML=''; wordEl.style.transform=''; wordEl.textContent='Pronto';
+  rebuildTrail();
+  renderDrawerList();
+  updateDrawerCurrent();
+}
+
+function buildPageIndexMap(){
+  pageIndexMap = [];
+  steps.forEach((s,i)=>{ if(pageIndexMap[s.page]===undefined) pageIndexMap[s.page]=i; });
+}
+
+function switchView(name){
+  libraryView.classList.toggle('active', name==='library');
+  readerView.classList.toggle('active', name==='reader');
+  uploadFab.style.display = name==='library' ? 'flex' : 'none';
+}
+
+document.getElementById('backToLib').onclick = async ()=>{
+  clearTimeout(timer); playing=false; clearMedia();
+  await saveProgress();
+  closeDrawer();
+  switchView('library');
+  renderLibrary();
+};
+async function saveProgress(){
+  if(!currentDoc) return;
+  currentDoc.lastIndex = idx;
+  currentDoc.totalSteps = steps.length;
+  await dbPut(currentDoc);
+}
+
+function orpIndex(word){
+  const len = word.length;
+  if(len<=1) return 0; if(len<=5) return 1; if(len<=9) return 2; return 3;
+}
+function renderWord(step){
+  const w = step.text;
+  const i = Math.min(orpIndex(w), Math.max(w.length-1,0));
+  wordEl.innerHTML = w.slice(0,i) + '<span class="orp">'+(w[i]||'')+'</span>' + w.slice(i+1);
+  requestAnimationFrame(()=>{
+    const full = wordEl.getBoundingClientRect();
+    const orpSpan = wordEl.querySelector('.orp'); if(!orpSpan) return;
+    const os = orpSpan.getBoundingClientRect();
+    const offset = (os.left+os.width/2) - (full.left+full.width/2);
+    wordEl.style.transform = 'translateX('+(-offset)+'px)';
+  });
+}
+
+function rebuildTrail(){
+  const words = [];
+  for(let i=0; i<idx && words.length<TRAIL_MAX; i++){
+    const s = steps[idx-1-i]; if(!s) break;
+    if(s.type==='word') words.unshift(s.text);
+  }
+  renderTrail(words);
+}
+function pushToTrail(word){
+  const spans = trailEl.querySelectorAll('span');
+  const words = Array.from(spans).map(s=>s.textContent);
+  words.push(word);
+  if(words.length>TRAIL_MAX) words.shift();
+  renderTrail(words);
+}
+function renderTrail(words){
+  trailEl.innerHTML = words.map((w,i)=> i===words.length-1 ? '<span class="current">'+w+'</span>' : '<span>'+w+'</span>').join(' ');
+  trailEl.scrollLeft = trailEl.scrollWidth;
+}
+
+function tick(){
+  clearTimeout(timer);
+  if(!playing) return;
+  if(idx>=steps.length){ playing=false; playBtn.textContent='▶'; wordEl.style.transform=''; wordEl.textContent='Fine ✓'; saveProgress(); return; }
+  const step = steps[idx];
+  if(step.type==='word'){
+    renderWord(step);
+    pushToTrail(step.text);
+    updateDrawerCurrent();
+    const ms = 60000/parseInt(wpmInput.value,10);
+    idx++;
+    if(idx % 25 === 0) saveProgress();
+    timer = setTimeout(tick, ms);
+  } else {
+    playing=false; playBtn.textContent='▶';
+    updateDrawerCurrent();
+    showMedia(step);
+  }
+}
+playBtn.onclick = ()=>{
+  playing = !playing; playBtn.textContent = playing?'❚❚':'▶';
+  if(playing) tick(); else { clearTimeout(timer); saveProgress(); }
+};
+document.getElementById('restart').onclick = ()=>{
+  idx=0; playing=false; clearTimeout(timer); clearMedia();
+  playBtn.textContent='▶'; wordEl.style.transform=''; wordEl.textContent='Pronto';
+  trailEl.innerHTML=''; updateDrawerCurrent(); saveProgress();
+};
+document.getElementById('back').onclick = ()=>{
+  idx = Math.max(0, idx-10); clearMedia(); rebuildTrail(); updateDrawerCurrent();
+  if(playing) tick();
+};
+wpmInput.oninput = ()=>{ wpmLabel.textContent = wpmInput.value+' wpm'; };
+
+/* ---------- media (immagini/formule) con zoom e pan ---------- */
+function showMedia(step){
+  clearMedia();
+  const wrap = document.createElement('div');
+  wrap.className = 'media-wrap'; wrap.id = 'mediaWrap';
+  wrap.innerHTML =
+    '<div class="media-viewport" id="mediaViewport"><img id="mediaImg" src="'+step.dataUrl+'"></div>'
+    + '<div class="media-footer">'
+    + '<div class="zoom-hint">Pizzica o doppio tocco per ingrandire</div>'
+    + '<div class="media-label">'+step.label+'</div>'
+    + '<button class="continue-btn" id="continueBtn">Continua</button>'
+    + '</div>';
+  stage.parentNode.insertBefore(wrap, trailEl);
+  document.getElementById('continueBtn').onclick = ()=>{
+    clearMedia(); idx++; playing=true; playBtn.textContent='❚❚'; tick();
+  };
+  setupZoom(document.getElementById('mediaViewport'), document.getElementById('mediaImg'));
+}
+function clearMedia(){ const m=document.getElementById('mediaWrap'); if(m) m.remove(); }
+
+function setupZoom(viewport, img){
+  let scale=1, tx=0, ty=0;
+  let pointers = new Map();
+  let startDist=0, startScale=1, lastTap=0;
+  let panStart=null;
+
+  function apply(){ img.style.transform = 'translate('+tx+'px,'+ty+'px) scale('+scale+')'; }
+  function clamp(){
+    scale = Math.min(Math.max(scale,1), 5);
+    if(scale===1){ tx=0; ty=0; }
+  }
+
+  viewport.addEventListener('pointerdown', e=>{
+    viewport.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(pointers.size===1){ panStart = {x:e.clientX-tx, y:e.clientY-ty}; }
+    if(pointers.size===2){
+      const pts = Array.from(pointers.values());
+      startDist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+      startScale = scale;
+    }
+  });
+  viewport.addEventListener('pointermove', e=>{
+    if(!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(pointers.size===2){
+      const pts = Array.from(pointers.values());
+      const dist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+      scale = startScale * (dist/startDist);
+      clamp(); apply();
+    } else if(pointers.size===1 && scale>1 && panStart){
+      tx = e.clientX - panStart.x; ty = e.clientY - panStart.y;
+      apply();
+    }
+  });
+  function endPointer(e){
+    pointers.delete(e.pointerId);
+    if(pointers.size<2) startDist=0;
+    if(pointers.size===0){
+      const now = Date.now();
+      if(now-lastTap<300){
+        if(scale>1){ scale=1; tx=0; ty=0; } else { scale=2.4; }
+        apply();
+      }
+      lastTap = now;
+    }
+  }
+  viewport.addEventListener('pointerup', endPointer);
+  viewport.addEventListener('pointercancel', endPointer);
+  viewport.addEventListener('wheel', e=>{
+    e.preventDefault();
+    scale += (e.deltaY<0 ? 0.15 : -0.15);
+    clamp(); apply();
+  }, {passive:false});
+  viewport.addEventListener('dblclick', ()=>{
+    if(scale>1){ scale=1; tx=0; ty=0; } else { scale=2.4; }
+    apply();
+  });
+}
+
+/* ---------- drawer pagine ---------- */
+document.getElementById('drawerToggle').onclick = ()=>{ drawer.classList.add('open'); drawerBackdrop.classList.add('open'); scrollDrawerToCurrent(); };
+drawerBackdrop.onclick = closeDrawer;
+function closeDrawer(){ drawer.classList.remove('open'); drawerBackdrop.classList.remove('open'); }
+
+const imgIconSmall = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.3"/><path d="M21 16l-5.5-5.5L8 18"/></svg>';
+
+function renderDrawerList(){
+  const pages = [];
+  for(let p=1; p<=(currentDoc?currentDoc.pageCount:0); p++){
+    const isImg = steps[pageIndexMap[p]]?.type==='image';
+    pages.push({p, isImg});
+  }
+  drawerList.innerHTML = pages.map(pg=>
+    '<div class="drawer-item" data-page="'+pg.p+'">'+(pg.isImg?imgIconSmall:'')+'<span>Pagina '+pg.p+'</span></div>'
+  ).join('');
+}
+drawerList.addEventListener('click', e=>{
+  const item = e.target.closest('.drawer-item'); if(!item) return;
+  const p = Number(item.dataset.page);
+  idx = pageIndexMap[p] ?? idx;
+  playing=false; clearTimeout(timer); clearMedia(); playBtn.textContent='▶';
+  rebuildTrail(); updateDrawerCurrent();
+  const s = steps[idx];
+  if(s && s.type==='word'){ wordEl.style.transform=''; renderWord(s); }
+  closeDrawer();
+});
+function updateDrawerCurrent(){
+  const s = steps[idx]; if(!s) return;
+  const p = s.page;
+  drawerList.querySelectorAll('.drawer-item').forEach(el=>{
+    el.classList.toggle('current', Number(el.dataset.page)===p);
+  });
+}
+function scrollDrawerToCurrent(){
+  const cur = drawerList.querySelector('.drawer-item.current');
+  if(cur) cur.scrollIntoView({block:'center'});
+}
+
+/* ---------- tema ---------- */
+document.getElementById('themeToggle').onclick = ()=>{
+  const root = document.documentElement;
+  root.setAttribute('data-theme', root.getAttribute('data-theme')==='light' ? 'dark' : 'light');
+};
+
+/* ---------- avvio ---------- */
+renderLibrary();
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('service-worker.js').catch(()=>{}); });
+}
+</script>
+</body>
+</html>
